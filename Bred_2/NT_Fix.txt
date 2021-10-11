@@ -1,0 +1,92 @@
+Быстрый и грязный фикс для NT. Но лучше избавиться от Richedit. 
+      id_Copy:
+      begin
+       SendMessage(RTF, EM_EXGETSEL, 0, Longint(@CR));
+       L:= CR.cpMax - CR.cpMin;
+       if L=0 then exit;
+       if unicode then
+       begin
+        DataPCtr := PChar(GlobalAlloc(GPTR, L+1));
+        if DataPCtr<>nil then
+        begin
+         SendMessage(RTF, EM_GETSELTEXT,
+           0, longint(DataPCtr));
+         if OpenClipboard(Window)then
+         begin
+          Data := GlobalAlloc(GHND or GMEM_DDESHARE, (L+1)*2);
+          if Data<>0 then
+          begin
+           DataPWtr := GlobalLock(Data);
+           if DataPWtr<>nil then
+           begin
+            MultiByteToWideChar(CP_NT[TextD], 0, DataPCtr, l, DataPWtr, (l+1)*2);
+            GlobalUnlock(Data);
+            EmptyClipboard;
+            SetClipboardData(CF_UNICODETEXT, Data);
+           end;
+          end;
+          GlobalFree(integer(DataPCtr));
+          CloseClipboard;
+         end;
+        end;
+       end else
+       begin
+        Data := GlobalAlloc(GHND or GMEM_DDESHARE, L+1);
+        if Data<>0 then
+        begin
+         DataPCtr := GlobalLock(Data);
+         if DataPCtr<>nil then
+         begin
+          SendMessage(RTF, EM_GETSELTEXT,
+           0, Longint(DataPCtr));
+          if OpenClipboard(Window)then
+          begin
+           EmptyClipboard;
+           case TextD of
+           0:SetClipboardData(CF_TEXT, Data);
+           1:SetClipboardData(CF_OEMTEXT, Data);
+           2:
+            begin
+            for L := 0 to L-1 do
+             if byte(DataPCtr[L])>=128 then
+              DataPCtr[L] := Code[3,byte(DataPCtr[L])];
+             SetClipboardData(CF_OEMTEXT, Data);
+            end;
+           end;
+           CloseClipboard;
+         end;
+         GlobalUnlock(Data);
+        end;
+       end;
+       end;
+       exit
+      end;
+      id_Paste:
+      begin
+       if IsClipboardFormatAvailable(CF_UNICODETEXT) then
+       if OpenClipboard(Window)then
+       begin
+        Data := GetClipboardData(CF_UNICODETEXT);
+        if Data <> 0 then
+        begin
+         DataPWtr := PWideChar(GlobalLock(Data));
+         if DataPWtr<>nil then
+         begin
+          m.MemSize:=WideCharToMultiByte(CP_NT[TextD], 0, DataPWtr, -1, nil, 0, nil, nil)-1;
+          makebackup(4,m.MemSize);
+          m.Handle:= GlobalAlloc(GPTR, m.MemSize+1);
+          if m.Handle<>0 then
+           begin
+            WideCharToMultiByte(CP_NT[TextD], 0, DataPWtr, -1, PChar(m.Handle), m.MemSize, nil, nil);
+            SetRTFText(@m,SFF_SELECTION or SF_TEXT);
+            GlobalFree(m.Handle);
+           end;
+          end;
+         end;
+         GlobalUnlock(Data);
+        end;
+        CloseClipboard;
+        exit;
+      end;
+Где-то есть глюк. Лень ловить - похоже, у самой NT с русским языком траблы.
+Хороша она лишь для отладки...
